@@ -114,43 +114,46 @@ namespace ThermopileDatenanalyse
             updateTimer.Tick += UpdateTimer_Tick;
         }
 
-        private void UpdateTimer_Tick(object? sender, EventArgs e)
+        private async void UpdateTimer_Tick(object? sender, EventArgs e)
         {
-            getData();
-            if (printToBackground == true)
-            {
-                fillBackground();  
-            }
+            await GetData();
 
+            if (printToBackground)
+            {
+                fillBackground(); 
+            }
         }
 
-        private void getData()
+        private async Task GetData()
         {
             try
             {
                 serialPort.Write("b");
 
-                // Alle Datenblöcke lesen
-                for (int i = 0; i < TotalBlocks; i++)
+                
+                await Task.Run(() =>
                 {
-                    RAMoutput[i] = new byte[DataBlockLengthPerBlock];
-                    int bytesRead = 0;
-                    while (bytesRead < DataBlockLengthPerBlock)
+                    for (int i = 0; i < TotalBlocks; i++)
                     {
-                        bytesRead += serialPort.Read(RAMoutput[i], bytesRead, DataBlockLengthPerBlock - bytesRead);
+                        RAMoutput[i] = new byte[DataBlockLengthPerBlock];
+                        int bytesRead = 0;
+                        while (bytesRead < DataBlockLengthPerBlock)
+                        {
+                            bytesRead += serialPort.Read(RAMoutput[i], bytesRead, DataBlockLengthPerBlock - bytesRead);
+                        }
                     }
-                }
 
-                ConvertToPixelData();
-                UpdateHeatmap();
+                    ConvertToPixelData(); 
+                });
+
+                
+                Invoke(() => UpdateHeatmap());
             }
             catch (Exception ex)
             {
                 updateTimer.Stop();
                 MessageBox.Show("Fehler beim Lesen/Zeichnen: " + ex.Message);
             }
-
-            
         }
 
         private void setBackground()
