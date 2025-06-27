@@ -31,6 +31,7 @@
             plotView1 = new OxyPlot.WindowsForms.PlotView();
             plotView2 = new OxyPlot.WindowsForms.PlotView();
             button1 = new Button();
+            button2 = new Button();
             SuspendLayout();
             // 
             // plotView1
@@ -63,17 +64,27 @@
             // 
             button1.Location = new Point(582, 114);
             button1.Name = "button1";
-            button1.Size = new Size(75, 23);
+            button1.Size = new Size(101, 23);
             button1.TabIndex = 2;
             button1.Text = "start";
             button1.UseVisualStyleBackColor = true;
             button1.Click += button1_Click;
+            // 
+            // button2
+            // 
+            button2.Location = new Point(582, 153);
+            button2.Name = "button2";
+            button2.Size = new Size(101, 23);
+            button2.TabIndex = 3;
+            button2.Text = "Background ";
+            button2.UseVisualStyleBackColor = true;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(button2);
             Controls.Add(button1);
             Controls.Add(plotView2);
             Controls.Add(plotView1);
@@ -87,5 +98,6 @@
         private OxyPlot.WindowsForms.PlotView plotView1;
         private OxyPlot.WindowsForms.PlotView plotView2;
         private Button button1;
+        private Button button2;
     }
 }

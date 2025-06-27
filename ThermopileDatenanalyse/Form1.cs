@@ -6,6 +6,8 @@ using OxyPlot.Series;
 using OxyPlot.WindowsForms;
 using OxyPlot.Axes;
 using System.Timers;
+using System.Drawing.Text;
+using System.Text.Json.Serialization.Metadata;
 
 
 
@@ -24,6 +26,8 @@ namespace ThermopileDatenanalyse
         const int PixelPerColumn = RowPerBlock * 2 * NumberOfBlocks;
         const int DataBlockLengthPerBlock = 2 * PixelPerRow * RowPerBlock + 10;
         const int TotalBlocks = 2 * NumberOfBlocks + 3;
+        const int BackgroundStackSize = 10;
+       
 
 
         private SerialPort serialPort = null!;
@@ -31,13 +35,21 @@ namespace ThermopileDatenanalyse
         private HeatMapSeries heatmapSeries = null!;
 
         private byte[][] RAMoutput = new byte[TotalBlocks][];
-        private ushort[,] pixelData = new ushort[PixelPerColumn, PixelPerRow];
+        private double[,] pixelData = new double[PixelPerColumn, PixelPerRow];
+        private double[,] background = new double[PixelPerColumn, PixelPerRow];
+
+
+        private Boolean printToBackground = false;
+        private double[,,] BackgroundStack = new double[BackgroundStackSize, PixelPerColumn, PixelPerRow];
+        private int backStackCount = 0;
+
 
         public Form1()
         {
             InitializeComponent();
             InitSerialPort();
             InitPlot();
+            InitTimer();
         }
 
         private void plotView2_Click(object sender, EventArgs e)
@@ -47,8 +59,24 @@ namespace ThermopileDatenanalyse
 
         private void button1_Click(object sender, EventArgs e)
         {
+            try
+            {
+                if (!serialPort.IsOpen)
+                    serialPort.Open();
+
+                updateTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Fehler beim Starten: " + ex.Message);
+            }
+
+        }
 
 
+        private void button2_Click(object sender, EventArgs e)
+        {
+            setBackground();
         }
 
 
@@ -71,13 +99,13 @@ namespace ThermopileDatenanalyse
                 Y1 = PixelPerColumn,
                 Interpolate = false,
                 RenderMethod = HeatMapRenderMethod.Bitmap,
-                Data = new double[PixelPerColumn, PixelPerRow]
+                Data = new double[PixelPerColumn ,  PixelPerRow]
             };
 
             heatmapModel.Series.Add(heatmapSeries);
             heatmapModel.Axes.Add(new LinearColorAxis { Position = AxisPosition.Right });
 
-            plotView1.Model = heatmapModel;
+            plotView2.Model = heatmapModel;
         }
 
         private void InitTimer()
@@ -87,6 +115,16 @@ namespace ThermopileDatenanalyse
         }
 
         private void UpdateTimer_Tick(object? sender, EventArgs e)
+        {
+            getData();
+            if (printToBackground == true)
+            {
+                fillBackground();  
+            }
+
+        }
+
+        private void getData()
         {
             try
             {
@@ -112,8 +150,53 @@ namespace ThermopileDatenanalyse
                 MessageBox.Show("Fehler beim Lesen/Zeichnen: " + ex.Message);
             }
 
+            
+        }
+
+        private void setBackground()
+        {
+            backStackCount = 0;
+            printToBackground = true;
 
         }
+
+
+        private void fillBackground()
+        {
+ 
+            for (int j = 0; j < PixelPerColumn; j++)
+            {
+                for (int k = 0; k < PixelPerRow; k++)
+                {
+                    BackgroundStack[backStackCount, j, k] = pixelData[j, k];
+                }
+            }
+            backStackCount++;
+            if (backStackCount > 9)
+            {
+                printToBackground = false;
+                newBackground();
+            }
+
+        }
+
+
+        private void newBackground()
+        {
+            for (int i = 0; i < PixelPerColumn; i++)
+            {
+                for(int j = 0;j < PixelPerRow; j++)
+                {
+                    for(int k = 0; k < BackgroundStackSize; k++)
+                    {
+                        background[i, j] += BackgroundStack[k, i, j];
+                    }
+                    background[i, j] /= BackgroundStackSize; 
+                }
+            }
+
+        }
+        
 
         private void ConvertToPixelData()
         {
@@ -129,8 +212,10 @@ namespace ThermopileDatenanalyse
                         // top half
                         pixelData[m + i * RowPerBlock, n] =
                             (ushort)(RAMoutput[i][pos] << 8 | RAMoutput[i][pos + 1]);
+                        
 
-                        // bottom half
+                        // bottom half		
+
                         pixelData[PixelPerColumn - 1 - m - i * RowPerBlock, n] =
                             (ushort)(RAMoutput[2 * NumberOfBlocks + 2 - i - 1][pos] << 8 | RAMoutput[2 * NumberOfBlocks + 2 - i - 1][pos + 1]);
                     }
@@ -141,16 +226,15 @@ namespace ThermopileDatenanalyse
 
         private void UpdateHeatmap()
         {
-            for (int y = 0; y < PixelPerColumn; y++)
-            {
-                for (int x = 0; x < PixelPerRow; x++)
-                {
-                    heatmapSeries.Data[y, x] = pixelData[y, x];
-                }
-            }
+            
+            heatmapSeries.Data = pixelData;
 
-            plotView1.InvalidatePlot(true);
+            plotView2.InvalidatePlot(true);
+
+  
         }
+
+        
     }
 
 
