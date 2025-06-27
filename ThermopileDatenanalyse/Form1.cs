@@ -179,7 +179,7 @@ namespace ThermopileDatenanalyse
             }
 
         }
-###
+
 
         private void newBackground()
         {
