@@ -15,7 +15,7 @@ namespace ThermopileDatenanalyse
 {
     public partial class Form1 : Form
     {
-        private string port = "COM7";
+        private string port = "COM1";
         private System.Windows.Forms.Timer updateTimer = new System.Windows.Forms.Timer();
         private int baudRate = 115200;
 
@@ -64,7 +64,7 @@ namespace ThermopileDatenanalyse
                 if (!serialPort.IsOpen)
                     serialPort.Open();
 
-                updateTimer.Start();
+                updateTimer.Start(); 
             }
             catch (Exception ex)
             {
@@ -179,7 +179,7 @@ namespace ThermopileDatenanalyse
             }
 
         }
-###
+
 
         private void newBackground()
         {
