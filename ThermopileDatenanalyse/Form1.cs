@@ -1,13 +1,14 @@
-﻿using System;
-using System.IO.Ports;
-using System.Windows.Forms;
-using OxyPlot;
+﻿using OxyPlot;
+using OxyPlot.Axes;
 using OxyPlot.Series;
 using OxyPlot.WindowsForms;
-using OxyPlot.Axes;
-using System.Timers;
-using System.Drawing.Text;
-using System.Text.Json.Serialization.Metadata;
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Windows.Forms;
 
 
 
@@ -15,26 +16,36 @@ namespace ThermopileDatenanalyse
 {
     public partial class Form1 : Form
     {
-        private string port = "COM7";
-        private System.Windows.Forms.Timer updateTimer = new System.Windows.Forms.Timer();
-        private int baudRate = 115200;
+        const int UDP_PACKET_LENGTH = 1401;
+        const int LAST_UDP_PACKET_LENGTH = 1149;
+        const int NUMBER_OF_PACKETS_PER_FRAME = 7; // Beispiel: 6 volle + 1 letztes Paket
+        const int Port = 30444;
+        const string IP = "192.168.4.1";
+
 
         const int RowPerBlock = 7;
         const int PixelPerRow = 120;
         const int NumberOfBlocks = 6;
         const int DataPos = 2;
         const int PixelPerColumn = RowPerBlock * 2 * NumberOfBlocks;
+
+
         const int DataBlockLengthPerBlock = 2 * PixelPerRow * RowPerBlock + 10;
         const int TotalBlocks = 2 * NumberOfBlocks + 3;
         const int BackgroundStackSize = 10;
-       
+
+        private UdpClient udpClient = null!;
+        private IPEndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
+        private IPEndPoint espEndpoint = new IPEndPoint(IPAddress.Parse(IP), Port);
+
+        private byte[][] receivedPackets = new byte[NUMBER_OF_PACKETS_PER_FRAME][];
+        private bool[] packetReceivedFlags = new bool[NUMBER_OF_PACKETS_PER_FRAME];
+        private int receivedPacketCount = 0;
 
 
-        private SerialPort serialPort = null!;
         private PlotModel heatmapModel = null!;
         private HeatMapSeries heatmapSeries = null!;
 
-        private byte[][] RAMoutput = new byte[TotalBlocks][];
         private double[,] pixelData = new double[PixelPerColumn, PixelPerRow];
         private double[,] background = new double[PixelPerColumn, PixelPerRow];
 
@@ -43,13 +54,14 @@ namespace ThermopileDatenanalyse
         private double[,,] BackgroundStack = new double[BackgroundStackSize, PixelPerColumn, PixelPerRow];
         private int backStackCount = 0;
 
+        
+
 
         public Form1()
         {
             InitializeComponent();
-            InitSerialPort();
+            InitUdp();
             InitPlot();
-            InitTimer();
         }
 
         private void plotView2_Click(object sender, EventArgs e)
@@ -59,18 +71,11 @@ namespace ThermopileDatenanalyse
 
         private void button1_Click(object sender, EventArgs e)
         {
-            try
-            {
-                if (!serialPort.IsOpen)
-                    serialPort.Open();
 
-                updateTimer.Start();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Fehler beim Starten: " + ex.Message);
-            }
 
+            string bindMessage = "Bind HTPA series device";
+            byte[] data = Encoding.ASCII.GetBytes(bindMessage);
+            udpClient.Send(data, data.Length, espEndpoint);             
         }
 
 
@@ -79,13 +84,140 @@ namespace ThermopileDatenanalyse
             setBackground();
         }
 
-
-        private void InitSerialPort()
+        private void button3_Click(object sender, EventArgs e)
         {
-            serialPort = new SerialPort(port, baudRate);
-            serialPort.ReadTimeout = 1000;
-            serialPort.WriteTimeout = 500;
+            string startMessage = "t";
+            byte[] data = Encoding.ASCII.GetBytes(startMessage);
+            udpClient.Send(data, data.Length, espEndpoint);
         }
+
+
+        private void InitUdp()
+        {
+            udpClient = new UdpClient(Port);
+            udpClient.BeginReceive(UdpReceiveCallback, null);
+        }
+
+
+
+
+
+        private void UdpReceiveCallback(IAsyncResult ar)
+        {
+            try
+            {
+                byte[] receivedBytes = udpClient.EndReceive(ar, ref remoteEP);
+
+                // Paket-Index bestimmen (angenommen erstes Byte = Paketnummer 0..6)
+                int packetIndex = receivedBytes[0]; // Beispiel, bitte anpassen je nach Protokoll
+
+                if (packetIndex >= 0 && packetIndex < NUMBER_OF_PACKETS_PER_FRAME)
+                {
+                    // Paket speichern
+                    receivedPackets[packetIndex] = receivedBytes;
+                    packetReceivedFlags[packetIndex] = true;
+                }
+
+                // Prüfen, ob alle Pakete da sind
+                if (AllPacketsReceived())
+                {
+                    byte[] fullFrame = CombinePackets();
+                    ProcessFullFrame(fullFrame);
+
+                    // Reset für nächsten Frame
+                    ResetPackets();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fehlerbehandlung
+                Console.WriteLine("UDP Receive Fehler: " + ex.Message);
+            }
+            finally
+            {
+                udpClient.BeginReceive(UdpReceiveCallback, null);
+            }
+        }
+
+        private bool AllPacketsReceived()
+        {
+            foreach (var flag in packetReceivedFlags)
+                if (!flag) return false;
+            return true;
+        }
+
+        private byte[] CombinePackets()
+        {
+            int fullLength = UDP_PACKET_LENGTH * (NUMBER_OF_PACKETS_PER_FRAME - 1) + LAST_UDP_PACKET_LENGTH;
+            byte[] fullFrame = new byte[fullLength];
+
+            for (int i = 0; i < NUMBER_OF_PACKETS_PER_FRAME - 1; i++)
+            {
+                Array.Copy(receivedPackets[i], 0, fullFrame, i * UDP_PACKET_LENGTH, UDP_PACKET_LENGTH);
+            }
+
+            // Letztes Paket, ggf. kleiner
+            Array.Copy(receivedPackets[NUMBER_OF_PACKETS_PER_FRAME - 1], 0,
+                       fullFrame, (NUMBER_OF_PACKETS_PER_FRAME - 1) * UDP_PACKET_LENGTH,
+                       LAST_UDP_PACKET_LENGTH);
+
+            return fullFrame;
+        }
+
+        private void ProcessFullFrame(byte[] fullFrame)
+        {
+
+            int DataBlockLengthPerBlock = 2 * PixelPerRow * RowPerBlock + 10;
+            int TotalBlocks = 2 * NumberOfBlocks + 3; // wie vorher
+
+            byte[][] RAMoutput = new byte[TotalBlocks][];
+            for (int i = 0; i < TotalBlocks; i++)
+            {
+                RAMoutput[i] = new byte[DataBlockLengthPerBlock];
+                Array.Copy(fullFrame, i * DataBlockLengthPerBlock, RAMoutput[i], 0, DataBlockLengthPerBlock);
+            }
+
+            // pixelData füllen
+            ushort pos;
+            for (int m = 0; m < RowPerBlock; m++)
+            {
+                for (int n = 0; n < PixelPerRow; n++)
+                {
+                    pos = (ushort)(2 * n + DataPos + m * 2 * PixelPerRow);
+
+                    for (int i = 0; i < NumberOfBlocks; i++)
+                    {
+                        // obere Hälfte
+                        pixelData[m + i * RowPerBlock, n] =
+                            (ushort)(RAMoutput[i][pos] << 8 | RAMoutput[i][pos + 1]);
+
+                        // untere Hälfte
+                        pixelData[PixelPerColumn - 1 - m - i * RowPerBlock, n] =
+                            (ushort)(RAMoutput[2 * NumberOfBlocks + 2 - i - 1][pos] << 8 | RAMoutput[2 * NumberOfBlocks + 2 - i - 1][pos + 1]);
+                    }
+                }
+            }
+
+            // Plot im UI aktualisieren, im UI-Thread
+            this.Invoke((MethodInvoker)delegate
+            {
+                heatmapSeries.Data = pixelData;
+                heatmapModel.InvalidatePlot(true);
+            });
+        }
+
+        private void ResetPackets()
+        {
+            for (int i = 0; i < NUMBER_OF_PACKETS_PER_FRAME; i++)
+            {
+                packetReceivedFlags[i] = false;
+                receivedPackets[i] = null!;
+            }
+            receivedPacketCount = 0;
+        }
+
+
+
 
         private void InitPlot()
         {
@@ -99,7 +231,7 @@ namespace ThermopileDatenanalyse
                 Y1 = PixelPerColumn,
                 Interpolate = false,
                 RenderMethod = HeatMapRenderMethod.Bitmap,
-                Data = new double[PixelPerColumn ,  PixelPerRow]
+                Data = new double[PixelPerColumn, PixelPerRow]
             };
 
             heatmapModel.Series.Add(heatmapSeries);
@@ -108,50 +240,12 @@ namespace ThermopileDatenanalyse
             plotView2.Model = heatmapModel;
         }
 
-        private void InitTimer()
-        {
-            updateTimer.Interval = 100; // 100ms → ca. 10Hz
-            updateTimer.Tick += UpdateTimer_Tick;
-        }
 
-        private void UpdateTimer_Tick(object? sender, EventArgs e)
-        {
-            getData();
-            if (printToBackground == true)
-            {
-                fillBackground();  
-            }
 
-        }
 
-        private void getData()
-        {
-            try
-            {
-                serialPort.Write("b");
 
-                // Alle Datenblöcke lesen
-                for (int i = 0; i < TotalBlocks; i++)
-                {
-                    RAMoutput[i] = new byte[DataBlockLengthPerBlock];
-                    int bytesRead = 0;
-                    while (bytesRead < DataBlockLengthPerBlock)
-                    {
-                        bytesRead += serialPort.Read(RAMoutput[i], bytesRead, DataBlockLengthPerBlock - bytesRead);
-                    }
-                }
 
-                ConvertToPixelData();
-                UpdateHeatmap();
-            }
-            catch (Exception ex)
-            {
-                updateTimer.Stop();
-                MessageBox.Show("Fehler beim Lesen/Zeichnen: " + ex.Message);
-            }
 
-            
-        }
 
         private void setBackground()
         {
@@ -163,7 +257,7 @@ namespace ThermopileDatenanalyse
 
         private void fillBackground()
         {
- 
+
             for (int j = 0; j < PixelPerColumn; j++)
             {
                 for (int k = 0; k < PixelPerRow; k++)
@@ -185,53 +279,29 @@ namespace ThermopileDatenanalyse
         {
             for (int i = 0; i < PixelPerColumn; i++)
             {
-                for(int j = 0;j < PixelPerRow; j++)
+                for (int j = 0; j < PixelPerRow; j++)
                 {
-                    for(int k = 0; k < BackgroundStackSize; k++)
+                    for (int k = 0; k < BackgroundStackSize; k++)
                     {
                         background[i, j] += BackgroundStack[k, i, j];
                     }
-                    background[i, j] /= BackgroundStackSize; 
+                    background[i, j] /= BackgroundStackSize;
                 }
             }
 
         }
-        
 
-        private void ConvertToPixelData()
-        {
-            ushort pos;
-            for (int m = 0; m < RowPerBlock; m++)
-            {
-                for (int n = 0; n < PixelPerRow; n++)
-                {
-                    pos = (ushort)(2 * n + DataPos + m * 2 * PixelPerRow);
 
-                    for (int i = 0; i < NumberOfBlocks; i++)
-                    {
-                        // top half
-                        pixelData[m + i * RowPerBlock, n] =
-                            (ushort)(RAMoutput[i][pos] << 8 | RAMoutput[i][pos + 1]);
-                        
 
-                        // bottom half		
-
-                        pixelData[PixelPerColumn - 1 - m - i * RowPerBlock, n] =
-                            (ushort)(RAMoutput[2 * NumberOfBlocks + 2 - i - 1][pos] << 8 | RAMoutput[2 * NumberOfBlocks + 2 - i - 1][pos + 1]);
-                    }
-                }
-            }
-
-        }
 
         private void UpdateHeatmap()
         {
-            
+
             heatmapSeries.Data = pixelData;
 
             plotView2.InvalidatePlot(true);
 
-  
+
         }
 
         
