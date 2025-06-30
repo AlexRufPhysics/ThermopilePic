@@ -18,7 +18,7 @@ namespace ThermopileDatenanalyse
     {
         const int UDP_PACKET_LENGTH = 1401;
         const int LAST_UDP_PACKET_LENGTH = 1149;
-        const int NUMBER_OF_PACKETS_PER_FRAME = 7; // Beispiel: 6 volle + 1 letztes Paket
+        const int NUMBER_OF_PACKETS_PER_FRAME = 17; 
         const int Port = 30444;
         const string IP = "192.168.4.1";
 
@@ -54,7 +54,7 @@ namespace ThermopileDatenanalyse
         private double[,,] BackgroundStack = new double[BackgroundStackSize, PixelPerColumn, PixelPerRow];
         private int backStackCount = 0;
 
-        
+
 
 
         public Form1()
@@ -75,7 +75,7 @@ namespace ThermopileDatenanalyse
 
             string bindMessage = "Bind HTPA series device";
             byte[] data = Encoding.ASCII.GetBytes(bindMessage);
-            udpClient.Send(data, data.Length, espEndpoint);             
+            udpClient.Send(data, data.Length, espEndpoint);
         }
 
 
@@ -89,6 +89,14 @@ namespace ThermopileDatenanalyse
             string startMessage = "t";
             byte[] data = Encoding.ASCII.GetBytes(startMessage);
             udpClient.Send(data, data.Length, espEndpoint);
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            string startMessage = "x";
+            byte[] data = Encoding.ASCII.GetBytes(startMessage);
+            udpClient.Send(data, data.Length, espEndpoint);
+
         }
 
 
@@ -109,7 +117,7 @@ namespace ThermopileDatenanalyse
                 byte[] receivedBytes = udpClient.EndReceive(ar, ref remoteEP);
 
                 // Paket-Index bestimmen (angenommen erstes Byte = Paketnummer 0..6)
-                int packetIndex = receivedBytes[0]; // Beispiel, bitte anpassen je nach Protokoll
+                int packetIndex = receivedBytes[0]-1; // Beispiel, bitte anpassen je nach Protokoll
 
                 if (packetIndex >= 0 && packetIndex < NUMBER_OF_PACKETS_PER_FRAME)
                 {
@@ -294,15 +302,7 @@ namespace ThermopileDatenanalyse
 
 
 
-        private void UpdateHeatmap()
-        {
-
-            heatmapSeries.Data = pixelData;
-
-            plotView2.InvalidatePlot(true);
-
-
-        }
+        
 
         
     }
