@@ -65,6 +65,10 @@ namespace ThermopileDatenanalyse
 
         private bool BuildCOM = false;
 
+        private double xCOM = 0;
+        private double yCOM = 0;
+        
+
 
 
 
@@ -118,7 +122,6 @@ namespace ThermopileDatenanalyse
             string startMessage = "x";
             byte[] data = Encoding.ASCII.GetBytes(startMessage);
             udpClient.Send(data, data.Length, espEndpoint);
-
         }
 
         private void InitUdp()
@@ -258,18 +261,30 @@ namespace ThermopileDatenanalyse
                 }
             }
 
-            var (xCOM,yCOM) = getCOM();
+            if (BuildCOM == true)
+            {
+                var (xCOM, yCOM) = getCOM();
+                textBox1.Text = $"COM X: {xCOM:F1}";
+                textBox2.Text = $"COM Y: {yCOM:F1}";
+            }
+            
 
-            textBox1.Text = $"COM X: {xCOM:F1}";
-            textBox2.Text = $"COM Y: {yCOM:F1}";
+
+
+
 
             this.Invoke((MethodInvoker)delegate
-            {
-                heatmapSeries.Data = picture;
-                xComLine.X = xCOM;
-                yComLine.Y = yCOM;
-                heatmapModel.InvalidatePlot(true);
-            });
+                {
+                    heatmapSeries.Data = picture;
+
+                    if (BuildCOM == true)
+                    {
+                        xComLine.X = xCOM;
+                        yComLine.Y = yCOM;
+                    }
+
+                    heatmapModel.InvalidatePlot(true);
+                });
         }
 
         private void ResetPackets()
