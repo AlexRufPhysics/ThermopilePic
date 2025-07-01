@@ -51,7 +51,7 @@ namespace ThermopileDatenanalyse
 
 
         private bool printToBackground = false;
-        private double[,,] BackgroundStack = new double[BackgroundStackSize, PixelPerColumn, PixelPerRow];
+        
         private int backStackCount = 0;
 
 
@@ -160,14 +160,14 @@ namespace ThermopileDatenanalyse
             int fullLength = UDP_PACKET_LENGTH * (NUMBER_OF_PACKETS_PER_FRAME - 1) + LAST_UDP_PACKET_LENGTH;
             byte[] fullFrame = new byte[fullLength];
 
-            for (int i = 0; i < NUMBER_OF_PACKETS_PER_FRAME - 2; i++)
+            for (int i = 0; i < NUMBER_OF_PACKETS_PER_FRAME - 1; i++)
             {
-                Array.Copy(receivedPackets[i], 1, fullFrame, i * UDP_PACKET_LENGTH , UDP_PACKET_LENGTH -1);
+                Array.Copy(receivedPackets[i], 1, fullFrame, i * (UDP_PACKET_LENGTH-1) , UDP_PACKET_LENGTH -1);
             }
 
             // Letztes Paket, ggf. kleiner
             Array.Copy(receivedPackets[NUMBER_OF_PACKETS_PER_FRAME - 1], 1,
-                       fullFrame, (NUMBER_OF_PACKETS_PER_FRAME - 2) * UDP_PACKET_LENGTH,
+                       fullFrame, (NUMBER_OF_PACKETS_PER_FRAME - 1) * (UDP_PACKET_LENGTH-1),
                        LAST_UDP_PACKET_LENGTH-1);
 
             return fullFrame;
