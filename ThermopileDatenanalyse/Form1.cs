@@ -27,7 +27,7 @@ namespace ThermopileDatenanalyse
         const int PixelPerRow = 120;
         const int NumberOfBlocks = 6;
         const int DataPos = 2;
-        const int PixelPerColumn = RowPerBlock * 2 * NumberOfBlocks;
+        const int PixelPerColumn = 84;
 
 
         const int DataBlockLengthPerBlock = 2 * PixelPerRow * RowPerBlock + 10;
@@ -50,7 +50,7 @@ namespace ThermopileDatenanalyse
         private double[,] background = new double[PixelPerColumn, PixelPerRow];
 
 
-        private Boolean printToBackground = false;
+        private bool printToBackground = false;
         private double[,,] BackgroundStack = new double[BackgroundStackSize, PixelPerColumn, PixelPerRow];
         private int backStackCount = 0;
 
@@ -139,7 +139,8 @@ namespace ThermopileDatenanalyse
             catch (Exception ex)
             {
                 // Fehlerbehandlung
-                Console.WriteLine("UDP Receive Fehler: " + ex.Message);
+                //Console.WriteLine("UDP Receive Fehler: " + ex.Message);
+                Console.WriteLine("UDP Receive Fehler: " + ex.StackTrace);
             }
             finally
             {
@@ -159,52 +160,45 @@ namespace ThermopileDatenanalyse
             int fullLength = UDP_PACKET_LENGTH * (NUMBER_OF_PACKETS_PER_FRAME - 1) + LAST_UDP_PACKET_LENGTH;
             byte[] fullFrame = new byte[fullLength];
 
-            for (int i = 0; i < NUMBER_OF_PACKETS_PER_FRAME - 1; i++)
+            for (int i = 0; i < NUMBER_OF_PACKETS_PER_FRAME - 2; i++)
             {
-                Array.Copy(receivedPackets[i], 0, fullFrame, i * UDP_PACKET_LENGTH, UDP_PACKET_LENGTH);
+                Array.Copy(receivedPackets[i], 1, fullFrame, i * UDP_PACKET_LENGTH , UDP_PACKET_LENGTH -1);
             }
 
             // Letztes Paket, ggf. kleiner
-            Array.Copy(receivedPackets[NUMBER_OF_PACKETS_PER_FRAME - 1], 0,
-                       fullFrame, (NUMBER_OF_PACKETS_PER_FRAME - 1) * UDP_PACKET_LENGTH,
-                       LAST_UDP_PACKET_LENGTH);
+            Array.Copy(receivedPackets[NUMBER_OF_PACKETS_PER_FRAME - 1], 1,
+                       fullFrame, (NUMBER_OF_PACKETS_PER_FRAME - 2) * UDP_PACKET_LENGTH,
+                       LAST_UDP_PACKET_LENGTH-1);
 
             return fullFrame;
         }
 
         private void ProcessFullFrame(byte[] fullFrame)
         {
-
-            int DataBlockLengthPerBlock = 2 * PixelPerRow * RowPerBlock + 10;
-            int TotalBlocks = 2 * NumberOfBlocks + 3; // wie vorher
-
-            byte[][] RAMoutput = new byte[TotalBlocks][];
-            for (int i = 0; i < TotalBlocks; i++)
-            {
-                RAMoutput[i] = new byte[DataBlockLengthPerBlock];
-                Array.Copy(fullFrame, i * DataBlockLengthPerBlock, RAMoutput[i], 0, DataBlockLengthPerBlock);
-            }
-
-            // pixelData füllen
-            ushort pos;
-            for (int m = 0; m < RowPerBlock; m++)
+            int fullFrameIndex = 0;
+            for (int m = 0; m < PixelPerColumn; m++)
             {
                 for (int n = 0; n < PixelPerRow; n++)
                 {
-                    pos = (ushort)(2 * n + DataPos + m * 2 * PixelPerRow);
+                    pixelData[m, n] =
+                            (ushort)(fullFrame[fullFrameIndex]  | fullFrame[fullFrameIndex +1] << 8);   
 
-                    for (int i = 0; i < NumberOfBlocks; i++)
-                    {
-                        // obere Hälfte
-                        pixelData[m + i * RowPerBlock, n] =
-                            (ushort)(RAMoutput[i][pos] << 8 | RAMoutput[i][pos + 1]);
-
-                        // untere Hälfte
-                        pixelData[PixelPerColumn - 1 - m - i * RowPerBlock, n] =
-                            (ushort)(RAMoutput[2 * NumberOfBlocks + 2 - i - 1][pos] << 8 | RAMoutput[2 * NumberOfBlocks + 2 - i - 1][pos + 1]);
-                    }
+                    fullFrameIndex += 2;
                 }
-            }
+            }  
+            
+            
+            
+            
+
+            
+
+
+            
+
+
+            
+            
 
             // Plot im UI aktualisieren, im UI-Thread
             this.Invoke((MethodInvoker)delegate
