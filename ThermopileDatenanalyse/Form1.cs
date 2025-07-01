@@ -263,9 +263,8 @@ namespace ThermopileDatenanalyse
 
             if (BuildCOM == true)
             {
-                var (xCOM, yCOM) = getCOM();
-                textBox1.Text = $"COM X: {xCOM:F1}";
-                textBox2.Text = $"COM Y: {yCOM:F1}";
+                (xCOM, yCOM) = getCOM();
+                
             }
             
 
@@ -279,6 +278,8 @@ namespace ThermopileDatenanalyse
 
                     if (BuildCOM == true)
                     {
+                        textBox1.Text = $"COM X: {xCOM:F1}";
+                        textBox2.Text = $"COM Y: {yCOM:F1}";
                         xComLine.X = xCOM;
                         yComLine.Y = yCOM;
                     }
