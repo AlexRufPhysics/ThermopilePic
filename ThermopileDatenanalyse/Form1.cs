@@ -1,4 +1,5 @@
 ﻿using OxyPlot;
+using OxyPlot.Annotations;
 using OxyPlot.Axes;
 using OxyPlot.Series;
 using OxyPlot.WindowsForms;
@@ -9,6 +10,7 @@ using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows.Forms;
+using System.Xml.Linq;
 
 
 
@@ -18,7 +20,7 @@ namespace ThermopileDatenanalyse
     {
         const int UDP_PACKET_LENGTH = 1401;
         const int LAST_UDP_PACKET_LENGTH = 1149;
-        const int NUMBER_OF_PACKETS_PER_FRAME = 17; 
+        const int NUMBER_OF_PACKETS_PER_FRAME = 17;
         const int Port = 30444;
         const string IP = "192.168.4.1";
 
@@ -47,16 +49,22 @@ namespace ThermopileDatenanalyse
 
         private PlotModel heatmapModel = null!;
         private HeatMapSeries heatmapSeries = null!;
+        private LineAnnotation xComLine = null!;
+        private LineAnnotation yComLine = null!;
 
         private double[,] pixelData = new double[PixelPerColumn, PixelPerRow];
+        private double[,] framestack = new double[PixelPerColumn, PixelPerRow];
         private double[,] background = new double[PixelPerColumn, PixelPerRow];
         private double[,] picture = new double[PixelPerColumn, PixelPerRow];
 
 
 
-        List <double[,]> BackgroundStack = new List<double[,]>();
+        List<double[,]> BackgroundStack = new List<double[,]>();
         const int BackgroundFrameStack = 50;
-        
+        private bool BuildFramestack = false;
+
+        private bool BuildCOM = false;
+
 
 
 
@@ -88,11 +96,21 @@ namespace ThermopileDatenanalyse
             setBackground();
         }
 
+        private void checkBox2_CheckedChanged(object sender, EventArgs e)
+        {
+            BuildFramestack = !BuildFramestack;
+        }
+
         private void button3_Click(object sender, EventArgs e)
         {
             string startMessage = "t";
             byte[] data = Encoding.ASCII.GetBytes(startMessage);
             udpClient.Send(data, data.Length, espEndpoint);
+        }
+
+        private void checkBox1_CheckedChanged(object sender, EventArgs e)
+        {
+            BuildCOM = !BuildCOM;
         }
 
         private void button4_Click(object sender, EventArgs e)
@@ -103,16 +121,11 @@ namespace ThermopileDatenanalyse
 
         }
 
-
         private void InitUdp()
         {
             udpClient = new UdpClient(Port);
             udpClient.BeginReceive(UdpReceiveCallback, null);
         }
-
-
-
-
 
         private void UdpReceiveCallback(IAsyncResult ar)
         {
@@ -121,7 +134,7 @@ namespace ThermopileDatenanalyse
                 byte[] receivedBytes = udpClient.EndReceive(ar, ref remoteEP);
 
                 // Paket-Index bestimmen (angenommen erstes Byte = Paketnummer 0..6)
-                int packetIndex = receivedBytes[0]-1; // Beispiel, bitte anpassen je nach Protokoll
+                int packetIndex = receivedBytes[0] - 1; // Beispiel, bitte anpassen je nach Protokoll
 
                 if (packetIndex >= 0 && packetIndex < NUMBER_OF_PACKETS_PER_FRAME)
                 {
@@ -166,13 +179,13 @@ namespace ThermopileDatenanalyse
 
             for (int i = 0; i < NUMBER_OF_PACKETS_PER_FRAME - 1; i++)
             {
-                Array.Copy(receivedPackets[i], 1, fullFrame, i * (UDP_PACKET_LENGTH-1) , UDP_PACKET_LENGTH -1);
+                Array.Copy(receivedPackets[i], 1, fullFrame, i * (UDP_PACKET_LENGTH - 1), UDP_PACKET_LENGTH - 1);
             }
 
             // Letztes Paket, ggf. kleiner
             Array.Copy(receivedPackets[NUMBER_OF_PACKETS_PER_FRAME - 1], 1,
-                       fullFrame, (NUMBER_OF_PACKETS_PER_FRAME - 1) * (UDP_PACKET_LENGTH-1),
-                       LAST_UDP_PACKET_LENGTH-1);
+                       fullFrame, (NUMBER_OF_PACKETS_PER_FRAME - 1) * (UDP_PACKET_LENGTH - 1),
+                       LAST_UDP_PACKET_LENGTH - 1);
 
             return fullFrame;
         }
@@ -185,7 +198,7 @@ namespace ThermopileDatenanalyse
                 for (int n = 0; n < PixelPerRow; n++)
                 {
                     pixelData[m, n] =
-                            (ushort)(fullFrame[fullFrameIndex]  | fullFrame[fullFrameIndex +1] << 8);   
+                            (ushort)(fullFrame[fullFrameIndex] | fullFrame[fullFrameIndex + 1] << 8);
 
                     fullFrameIndex += 2;
                 }
@@ -197,23 +210,64 @@ namespace ThermopileDatenanalyse
             }
             BackgroundStack.Add(pixelData);
 
+            if(BuildFramestack == true)
+            {
+                buildFramestack();
+            }
+
             buildPicture();
-            
+
         }
 
-        private void buildPicture()
+        private void buildFramestack()
         {
             for (int i = 0; i < PixelPerColumn; i++)
             {
                 for (int j = 0; j < PixelPerRow; j++)
                 {
-                    picture[i,j] = pixelData[i,j] - background[i,j];
+                    double sum = 0.0;
+                    for (int k = 0; k < BackgroundFrameStack; k++)
+                    {
+                        sum += BackgroundStack[k][i, j];
+                    }
+                    framestack[i, j] = sum / BackgroundFrameStack;
                 }
             }
+        }
+
+        private void buildPicture()
+        {
+            if (BuildFramestack == true)
+            {
+                for (int i = 0; i < PixelPerColumn; i++)
+                {
+                    for (int j = 0; j < PixelPerRow; j++)
+                    {
+                        picture[i, j] = framestack[i, j] - background[i, j];
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < PixelPerColumn; i++)
+                {
+                    for (int j = 0; j < PixelPerRow; j++)
+                    {
+                        picture[i, j] = pixelData[i, j] - background[i, j];
+                    }
+                }
+            }
+
+            var (xCOM,yCOM) = getCOM();
+
+            textBox1.Text = $"COM X: {xCOM:F1}";
+            textBox2.Text = $"COM Y: {yCOM:F1}";
 
             this.Invoke((MethodInvoker)delegate
             {
                 heatmapSeries.Data = picture;
+                xComLine.X = xCOM;
+                yComLine.Y = yCOM;
                 heatmapModel.InvalidatePlot(true);
             });
         }
@@ -234,7 +288,7 @@ namespace ThermopileDatenanalyse
         private void InitPlot()
         {
             heatmapModel = new PlotModel { Title = "Live Heatmap" };
-
+            
             heatmapSeries = new HeatMapSeries
             {
                 X0 = 0,
@@ -249,36 +303,68 @@ namespace ThermopileDatenanalyse
             heatmapModel.Series.Add(heatmapSeries);
             heatmapModel.Axes.Add(new LinearColorAxis { Position = AxisPosition.Right });
 
+            xComLine = new LineAnnotation
+            {
+                Type = LineAnnotationType.Vertical,
+                Color = OxyColors.Red,
+                LineStyle = LineStyle.Solid,
+                StrokeThickness = 2,
+                X = PixelPerRow / 2.0  
+            };
+            yComLine = new LineAnnotation
+            {
+                Type = LineAnnotationType.Horizontal,
+                Color = OxyColors.Red,
+                LineStyle = LineStyle.Solid,
+                StrokeThickness = 2,
+                Y = PixelPerColumn / 2.0  
+            };
+
             plotView2.Model = heatmapModel;
+            heatmapModel.Annotations.Add(xComLine);
+            heatmapModel.Annotations.Add(yComLine);
         }
 
         private void setBackground()
         {
+            buildFramestack();
             for (int i = 0; i < PixelPerColumn; i++)
             {
                 for (int j = 0; j < PixelPerRow; j++)
                 {
-                    double sum = 0.0;
-                    for (int k = 0; k < BackgroundFrameStack; k++)
-                    {
-                        sum += BackgroundStack[k][i, j];
-                    }
-                    background[i,j] = sum/BackgroundFrameStack;
+                    background[i, j] = framestack[i,j];
                 }
             }
+
+            this.Invoke((MethodInvoker)delegate
+            {
+                heatmapSeries.Data = picture;
+                heatmapModel.InvalidatePlot(true);
+            });
+        }
+
+        private (double,double) getCOM()
+        {
+            double COMx = 0;
+            double COMy = 0;
+            double Mass = 0;
+
+            for (int i = 0; i < PixelPerColumn; i++)
+            {
+                for (int j = 0; j < PixelPerRow; j++)
+                {
+                    COMx += i * picture[i, j];
+                    COMy += j * picture[i, j];
+                    Mass += picture[i, j];
+                }
+                COMx /= Mass;
+                COMy /= Mass;
+            }
+
+            return (COMx, COMy);
         }
 
 
-        
-
-
-
-
-
-
-        
-
-        
     }
 
 
