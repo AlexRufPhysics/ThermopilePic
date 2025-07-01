@@ -51,7 +51,7 @@ namespace ThermopileDatenanalyse
 
 
         private bool printToBackground = false;
-        
+        private double[,,] BackgroundStack = new double[BackgroundStackSize, PixelPerColumn, PixelPerRow];
         private int backStackCount = 0;
 
 
