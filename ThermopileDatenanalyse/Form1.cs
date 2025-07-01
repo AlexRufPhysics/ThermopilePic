@@ -353,13 +353,13 @@ namespace ThermopileDatenanalyse
             {
                 for (int j = 0; j < PixelPerRow; j++)
                 {
-                    COMx += i * picture[i, j];
-                    COMy += j * picture[i, j];
+                    COMx += j * picture[i, j];
+                    COMy += i * picture[i, j];
                     Mass += picture[i, j];
-                }
-                COMx /= Mass;
-                COMy /= Mass;
+                }              
             }
+            COMx /= Mass;
+            COMy /= Mass;
 
             return (COMx, COMy);
         }
