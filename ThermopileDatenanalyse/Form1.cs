@@ -43,16 +43,20 @@ namespace ThermopileDatenanalyse
         private int receivedPacketCount = 0;
 
 
+
+
         private PlotModel heatmapModel = null!;
         private HeatMapSeries heatmapSeries = null!;
 
         private double[,] pixelData = new double[PixelPerColumn, PixelPerRow];
         private double[,] background = new double[PixelPerColumn, PixelPerRow];
+        private double[,] picture = new double[PixelPerColumn, PixelPerRow];
 
 
-        private bool printToBackground = false;
-        private double[,,] BackgroundStack = new double[BackgroundStackSize, PixelPerColumn, PixelPerRow];
-        private int backStackCount = 0;
+
+        List <double[,]> BackgroundStack = new List<double[,]>();
+        const int BackgroundFrameStack = 50;
+        
 
 
 
@@ -185,25 +189,31 @@ namespace ThermopileDatenanalyse
 
                     fullFrameIndex += 2;
                 }
-            }  
-            
-            
-            
-            
+            }
 
+            if (BackgroundStack.Count >= BackgroundFrameStack)
+            {
+                BackgroundStack.RemoveAt(0);
+            }
+            BackgroundStack.Add(pixelData);
+
+            buildPicture();
             
+        }
 
+        private void buildPicture()
+        {
+            for (int i = 0; i < PixelPerColumn; i++)
+            {
+                for (int j = 0; j < PixelPerRow; j++)
+                {
+                    picture[i,j] = pixelData[i,j] - background[i,j];
+                }
+            }
 
-            
-
-
-            
-            
-
-            // Plot im UI aktualisieren, im UI-Thread
             this.Invoke((MethodInvoker)delegate
             {
-                heatmapSeries.Data = pixelData;
+                heatmapSeries.Data = picture;
                 heatmapModel.InvalidatePlot(true);
             });
         }
@@ -242,56 +252,26 @@ namespace ThermopileDatenanalyse
             plotView2.Model = heatmapModel;
         }
 
-
-
-
-
-
-
-
         private void setBackground()
-        {
-            backStackCount = 0;
-            printToBackground = true;
-
-        }
-
-
-        private void fillBackground()
-        {
-
-            for (int j = 0; j < PixelPerColumn; j++)
-            {
-                for (int k = 0; k < PixelPerRow; k++)
-                {
-                    BackgroundStack[backStackCount, j, k] = pixelData[j, k];
-                }
-            }
-            backStackCount++;
-            if (backStackCount > 9)
-            {
-                printToBackground = false;
-                newBackground();
-            }
-
-        }
-
-
-        private void newBackground()
         {
             for (int i = 0; i < PixelPerColumn; i++)
             {
                 for (int j = 0; j < PixelPerRow; j++)
                 {
-                    for (int k = 0; k < BackgroundStackSize; k++)
+                    double sum = 0.0;
+                    for (int k = 0; k < BackgroundFrameStack; k++)
                     {
-                        background[i, j] += BackgroundStack[k, i, j];
+                        sum += BackgroundStack[k][i, j];
                     }
-                    background[i, j] /= BackgroundStackSize;
+                    background[i,j] = sum/BackgroundFrameStack;
                 }
             }
-
         }
+
+
+        
+
+
 
 
 
