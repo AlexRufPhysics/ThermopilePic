@@ -35,7 +35,7 @@
             button3 = new Button();
             button4 = new Button();
             Framestack = new CheckBox();
-            checkBox1 = new CheckBox();
+            COM = new CheckBox();
             textBox1 = new TextBox();
             textBox2 = new TextBox();
             SuspendLayout();
@@ -120,13 +120,14 @@
             // 
             // checkBox1
             // 
-            checkBox1.AutoSize = true;
-            checkBox1.Location = new Point(512, 117);
-            checkBox1.Name = "checkBox1";
-            checkBox1.Size = new Size(54, 19);
-            checkBox1.TabIndex = 7;
-            checkBox1.Text = "COM";
-            checkBox1.UseVisualStyleBackColor = true;
+            COM.AutoSize = true;
+            COM.Location = new Point(512, 117);
+            COM.Name = "checkBox1";
+            COM.Size = new Size(54, 19);
+            COM.TabIndex = 7;
+            COM.Text = "COM";
+            COM.UseVisualStyleBackColor = true;
+            COM.CheckedChanged += checkBox2_CheckedChanged;
             // 
             // textBox1
             // 
@@ -149,7 +150,7 @@
             ClientSize = new Size(800, 450);
             Controls.Add(textBox2);
             Controls.Add(textBox1);
-            Controls.Add(checkBox1);
+            Controls.Add(COM);
             Controls.Add(Framestack);
             Controls.Add(button4);
             Controls.Add(button3);
@@ -172,7 +173,7 @@
         private Button button3;
         private Button button4;
         private CheckBox Framestack;
-        private CheckBox checkBox1;
+        private CheckBox COM;
         private TextBox textBox1;
         private TextBox textBox2;
     }

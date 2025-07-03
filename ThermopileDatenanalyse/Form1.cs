@@ -34,7 +34,7 @@ namespace ThermopileDatenanalyse
 
         const int DataBlockLengthPerBlock = 2 * PixelPerRow * RowPerBlock + 10;
         const int TotalBlocks = 2 * NumberOfBlocks + 3;
-        const int BackgroundStackSize = 10;
+        const int BackgroundStackSize = 100;
 
         private UdpClient udpClient = null!;
         private IPEndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
@@ -102,7 +102,7 @@ namespace ThermopileDatenanalyse
 
         private void checkBox2_CheckedChanged(object sender, EventArgs e)
         {
-            BuildFramestack = !BuildFramestack;
+            BuildCOM = !BuildCOM;
         }
 
         private void button3_Click(object sender, EventArgs e)
@@ -114,7 +114,9 @@ namespace ThermopileDatenanalyse
 
         private void checkBox1_CheckedChanged(object sender, EventArgs e)
         {
-            BuildCOM = !BuildCOM;
+            BuildFramestack = !BuildFramestack;
+            
+            
         }
 
         private void button4_Click(object sender, EventArgs e)
@@ -211,9 +213,11 @@ namespace ThermopileDatenanalyse
             {
                 BackgroundStack.RemoveAt(0);
             }
-            BackgroundStack.Add(pixelData);
+            double[,] copy = new double[PixelPerColumn, PixelPerRow];
+            Array.Copy(pixelData, copy, pixelData.Length);
+            BackgroundStack.Add(copy);
 
-            if(BuildFramestack == true)
+            if (BuildFramestack == true)
             {
                 buildFramestack();
             }
@@ -304,13 +308,27 @@ namespace ThermopileDatenanalyse
         private void InitPlot()
         {
             heatmapModel = new PlotModel { Title = "Live Heatmap" };
-            
+
+            heatmapModel.Axes.Add(new LinearAxis
+            {
+                Position = AxisPosition.Top,
+                Title = "X"
+            });
+
+            heatmapModel.Axes.Add(new LinearAxis
+            {
+                Position = AxisPosition.Left,
+                Title = "Y",
+                StartPosition = 1,
+                EndPosition = 0
+            });
+
             heatmapSeries = new HeatMapSeries
             {
                 X0 = 0,
-                X1 = PixelPerRow,
+                X1 = PixelPerColumn ,
                 Y0 = 0,
-                Y1 = PixelPerColumn,
+                Y1 = PixelPerRow,
                 Interpolate = false,
                 RenderMethod = HeatMapRenderMethod.Bitmap,
                 Data = new double[PixelPerColumn, PixelPerRow]
@@ -369,9 +387,9 @@ namespace ThermopileDatenanalyse
             {
                 for (int j = 0; j < PixelPerRow; j++)
                 {
-                    COMx += j * picture[i, j];
-                    COMy += i * picture[i, j];
-                    Mass += picture[i, j];
+                    COMx += i * Math.Sign(picture[i, j]) * picture[i, j] * picture[i, j];
+                    COMy += j * Math.Sign(picture[i, j]) * picture[i, j] * picture[i, j];
+                    Mass += Math.Sign(picture[i, j]) * picture[i, j] * picture[i, j];
                 }              
             }
             COMx /= Mass;
